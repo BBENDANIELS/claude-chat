@@ -8,16 +8,33 @@ const app = express();
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const upload = multer({ dest: "uploads/" });
 
-app.use(express.json({ limit: "20mb" }));
-app.use(express.static("public"));
-
+const SITE_PASSWORD = process.env.SITE_PASSWORD;
 const SYSTEM_PROMPT = `You are a helpful, knowledgeable assistant. You give clear, accurate answers and format responses with markdown where helpful.`;
 
+app.use(express.json({ limit: "20mb" }));
+
+// Login page at root
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/public/login.html");
+});
+
+// Auth endpoint
+app.post("/auth", (req, res) => {
+  if (req.body.password === SITE_PASSWORD) {
+    res.json({ ok: true });
+  } else {
+    res.status(401).json({ ok: false });
+  }
+});
+
+// Chat app served at /app
+app.use("/app", express.static("public"));
+
+// Chat endpoint
 app.post("/chat", upload.single("file"), async (req, res) => {
   try {
     let messages = JSON.parse(req.body.messages);
 
-    // If a file was uploaded, attach it to the last user message
     if (req.file) {
       const fileData = fs.readFileSync(req.file.path);
       const base64 = fileData.toString("base64");
@@ -31,7 +48,7 @@ app.post("/chat", upload.single("file"), async (req, res) => {
         },
         { type: "text", text: lastMsg.content || "What is in this image?" },
       ];
-      fs.unlinkSync(req.file.path); // clean up
+      fs.unlinkSync(req.file.path);
     }
 
     const response = await client.messages.create({
