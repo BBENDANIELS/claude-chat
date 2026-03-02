@@ -2,74 +2,139 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Claude</title>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
   <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: Georgia, serif;
-      background: #f5f5f0;
+      font-family: 'Crimson Pro', Georgia, serif;
+      background: #0f0f0f;
+      color: #e8e4de;
       display: flex;
       align-items: center;
       justify-content: center;
       height: 100dvh;
-      margin: 0;
+      overflow: hidden;
     }
+
+    .bg {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(210,180,140,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
     .box {
-      background: white;
-      border: 1px solid #e0e0d8;
-      border-radius: 12px;
-      padding: 2.5rem;
+      position: relative;
       display: flex;
       flex-direction: column;
-      gap: 1rem;
-      width: 300px;
+      align-items: center;
+      gap: 2rem;
+      width: 320px;
+      animation: fadeUp 0.6s ease both;
     }
-    h2 { font-size: 1rem; letter-spacing: 0.1em; text-transform: uppercase; color: #888; text-align: center; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .wordmark {
+      font-size: 1.5rem;
+      font-weight: 300;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #c8b89a;
+    }
+
+    .form {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
     input {
-      padding: 0.7rem 1rem;
-      border: 1px solid #d0d0c8;
-      border-radius: 2rem;
+      width: 100%;
+      padding: 0.85rem 1.25rem;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: #e8e4de;
       font-family: inherit;
-      font-size: 0.95rem;
+      font-size: 1rem;
       outline: none;
       text-align: center;
+      transition: border-color 0.2s;
     }
-    input:focus { border-color: #1a1a1a; }
+    input::placeholder { color: rgba(255,255,255,0.25); }
+    input:focus { border-color: rgba(200,184,154,0.5); }
+
     button {
-      padding: 0.7rem;
-      background: #1a1a1a;
-      color: white;
+      width: 100%;
+      padding: 0.85rem;
+      background: #c8b89a;
+      color: #0f0f0f;
       border: none;
-      border-radius: 2rem;
+      border-radius: 8px;
       font-family: inherit;
+      font-size: 1rem;
+      font-weight: 400;
+      letter-spacing: 0.05em;
       cursor: pointer;
-      font-size: 0.9rem;
+      transition: background 0.2s;
     }
-    button:hover { background: #333; }
-    .error { color: #c00; font-size: 0.85rem; text-align: center; display: none; }
+    button:hover { background: #d4c4a8; }
+
+    .error {
+      font-size: 0.85rem;
+      color: #e07070;
+      text-align: center;
+      min-height: 1.2em;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .error.show { opacity: 1; }
   </style>
 </head>
 <body>
+  <div class="bg"></div>
   <div class="box">
-    <h2>Claude</h2>
-    <input type="password" id="pw" placeholder="Enter password" />
-    <button onclick="login()">Enter</button>
-    <div class="error" id="err">Incorrect password</div>
+    <div class="wordmark">Claude</div>
+    <div class="form">
+      <input type="password" id="pw" placeholder="Enter password" autocomplete="current-password"/>
+      <button onclick="login()">Continue</button>
+    </div>
+    <div class="error" id="err">Incorrect password — try again</div>
   </div>
+
   <script>
     if (sessionStorage.getItem("auth")) window.location.href = "/app";
 
+    document.getElementById("pw").focus();
+
     async function login() {
       const pw = document.getElementById("pw").value;
-      const res = await fetch("/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw })
-      });
-      if (res.ok) {
-        sessionStorage.setItem("auth", "1");
-        window.location.href = "/app";
-      } else {
-        document.getElementById("err").style.display = "block";
+      const err = document.getElementById("err");
+      err.classList.remove("show");
+      try {
+        const res = await fetch("/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pw })
+        });
+        if (res.ok) {
+          sessionStorage.setItem("auth", "1");
+          window.location.href = "/app";
+        } else {
+          err.classList.add("show");
+          document.getElementById("pw").select();
+        }
+      } catch {
+        err.textContent = "Connection error — try again";
+        err.classList.add("show");
       }
     }
 
