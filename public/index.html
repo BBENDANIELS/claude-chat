@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Claude Chat</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -21,11 +22,28 @@
       width: 100%;
       max-width: 720px;
       padding: 1.5rem 1rem 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header span {
       font-size: 0.8rem;
       letter-spacing: 0.15em;
       text-transform: uppercase;
       color: #888;
     }
+
+    #clear-btn {
+      font-size: 0.75rem;
+      color: #aaa;
+      background: none;
+      border: 1px solid #ddd;
+      border-radius: 1rem;
+      padding: 0.3rem 0.75rem;
+      cursor: pointer;
+    }
+    #clear-btn:hover { color: #555; border-color: #aaa; background: none; }
 
     #chat {
       flex: 1;
@@ -38,11 +56,7 @@
       gap: 1rem;
     }
 
-    .msg {
-      max-width: 85%;
-      line-height: 1.6;
-      font-size: 0.97rem;
-    }
+    .msg { max-width: 85%; line-height: 1.6; font-size: 0.97rem; }
 
     .msg.user {
       align-self: flex-end;
@@ -50,6 +64,7 @@
       color: #f5f5f0;
       padding: 0.75rem 1rem;
       border-radius: 1rem 1rem 0.2rem 1rem;
+      white-space: pre-wrap;
     }
 
     .msg.assistant {
@@ -58,21 +73,64 @@
       border: 1px solid #e0e0d8;
       padding: 0.75rem 1rem;
       border-radius: 0.2rem 1rem 1rem 1rem;
-      white-space: pre-wrap;
     }
 
-    .msg.assistant.thinking {
-      color: #aaa;
-      font-style: italic;
+    .msg.assistant.thinking { color: #aaa; font-style: italic; }
+
+    /* Markdown styles */
+    .msg.assistant h1, .msg.assistant h2, .msg.assistant h3 {
+      margin: 0.75rem 0 0.4rem; font-size: 1rem; font-weight: bold;
     }
+    .msg.assistant p { margin-bottom: 0.5rem; }
+    .msg.assistant p:last-child { margin-bottom: 0; }
+    .msg.assistant ul, .msg.assistant ol { padding-left: 1.4rem; margin-bottom: 0.5rem; }
+    .msg.assistant li { margin-bottom: 0.25rem; }
+    .msg.assistant code {
+      background: #f0f0ea; padding: 0.1rem 0.35rem;
+      border-radius: 3px; font-size: 0.88rem; font-family: monospace;
+    }
+    .msg.assistant pre {
+      background: #f0f0ea; padding: 0.75rem; border-radius: 6px;
+      overflow-x: auto; margin-bottom: 0.5rem;
+    }
+    .msg.assistant pre code { background: none; padding: 0; }
+    .msg.assistant strong { font-weight: bold; }
+    .msg.assistant em { font-style: italic; }
+
+    .msg img { max-width: 100%; border-radius: 6px; margin-top: 0.5rem; }
 
     #input-area {
       width: 100%;
       max-width: 720px;
       padding: 0.75rem 1rem 1.25rem;
       display: flex;
+      flex-direction: column;
       gap: 0.5rem;
     }
+
+    #file-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: #888;
+    }
+
+    #file-input { display: none; }
+
+    #file-label {
+      cursor: pointer;
+      padding: 0.3rem 0.75rem;
+      border: 1px dashed #ccc;
+      border-radius: 1rem;
+      font-size: 0.78rem;
+      color: #888;
+    }
+    #file-label:hover { border-color: #888; color: #444; }
+
+    #file-name { font-size: 0.78rem; color: #555; }
+
+    #bottom-row { display: flex; gap: 0.5rem; }
 
     #input {
       flex: 1;
@@ -85,10 +143,9 @@
       outline: none;
       resize: none;
     }
-
     #input:focus { border-color: #1a1a1a; }
 
-    button {
+    button#send {
       padding: 0.7rem 1.25rem;
       background: #1a1a1a;
       color: white;
@@ -97,33 +154,70 @@
       font-family: inherit;
       font-size: 0.85rem;
       cursor: pointer;
-      letter-spacing: 0.05em;
     }
-
-    button:hover { background: #333; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
+    button#send:hover { background: #333; }
+    button#send:disabled { background: #ccc; cursor: not-allowed; }
   </style>
 </head>
 <body>
-  <header>Claude</header>
+  <header>
+    <span>Claude</span>
+    <button id="clear-btn">New conversation</button>
+  </header>
 
   <div id="chat"></div>
 
   <div id="input-area">
-    <textarea id="input" rows="1" placeholder="Message Claude…"></textarea>
-    <button id="send">Send</button>
+    <div id="file-row">
+      <label id="file-label" for="file-input">📎 Attach image</label>
+      <input type="file" id="file-input" accept="image/*" />
+      <span id="file-name"></span>
+    </div>
+    <div id="bottom-row">
+      <textarea id="input" rows="1" placeholder="Message Claude…"></textarea>
+      <button id="send">Send</button>
+    </div>
   </div>
 
   <script>
     const chat = document.getElementById("chat");
     const input = document.getElementById("input");
     const sendBtn = document.getElementById("send");
-    const history = [];
+    const fileInput = document.getElementById("file-input");
+    const fileName = document.getElementById("file-name");
+    const clearBtn = document.getElementById("clear-btn");
 
-    function addMessage(role, text, temp = false) {
+    const STORAGE_KEY = "claude-chat-history";
+    let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+
+    // Render saved history on load
+    history.forEach(msg => {
+      if (msg.role === "user") {
+        const text = typeof msg.content === "string" ? msg.content : msg.content.find(b => b.type === "text")?.text || "";
+        addMessage("user", text);
+      } else {
+        addMessage("assistant", msg.content, false, true);
+      }
+    });
+
+    fileInput.addEventListener("change", () => {
+      fileName.textContent = fileInput.files[0]?.name || "";
+    });
+
+    clearBtn.addEventListener("click", () => {
+      history = [];
+      localStorage.removeItem(STORAGE_KEY);
+      chat.innerHTML = "";
+    });
+
+    function addMessage(role, text, temp = false, markdown = false) {
       const div = document.createElement("div");
       div.className = `msg ${role}${temp ? " thinking" : ""}`;
-      div.textContent = text;
+      if (markdown || role === "assistant") {
+        div.innerHTML = marked.parse(text);
+      } else {
+        div.textContent = text;
+      }
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
       return div;
@@ -131,26 +225,32 @@
 
     async function send() {
       const text = input.value.trim();
-      if (!text) return;
+      const file = fileInput.files[0];
+      if (!text && !file) return;
 
       input.value = "";
       sendBtn.disabled = true;
-      addMessage("user", text);
-      history.push({ role: "user", content: text });
+      addMessage("user", text || "📎 Image attached");
+      history.push({ role: "user", content: text || "What is in this image?" });
 
       const thinking = addMessage("assistant", "Thinking…", true);
 
       try {
-        const res = await fetch("/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: history }),
-        });
+        const formData = new FormData();
+        formData.append("messages", JSON.stringify(history));
+        if (file) formData.append("file", file);
+
+        const res = await fetch("/chat", { method: "POST", body: formData });
         const data = await res.json();
         const reply = data.reply || data.error;
+
         thinking.remove();
-        addMessage("assistant", reply);
+        addMessage("assistant", reply, false, true);
         history.push({ role: "assistant", content: reply });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+
+        fileInput.value = "";
+        fileName.textContent = "";
       } catch {
         thinking.textContent = "Error — please try again.";
       }
